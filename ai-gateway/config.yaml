@@ -1,9 +1,29 @@
+gateway:
+  request_timeout: 600
+  idle_timeout_seconds: 600
+  session_directory: sessions
+  max_recent_messages: 20
+  api_key: null # Set to require "Authorization: Bearer <key>".
+
 models:
   chat:
     endpoint: "http://localhost:8001/v1"
     timeout: 600
+    health_path: "/models"
+  coder:
+    endpoint: "http://localhost:8002/v1"
+    timeout: 600
+    health_path: "/models"
 
 routes:
+  coding:
+    model: coder
+    keywords: ["code", "program", "bug", "python", "javascript", "typescript", "docker", "git", "api"]
   chat:
     model: chat
-    timeout: 600
+    keywords: []
+
+tools:
+  enabled: false
+  allowed_git_commands: ["status", "diff", "log", "branch"]
+  allowed_docker_commands: ["ps", "images"]
