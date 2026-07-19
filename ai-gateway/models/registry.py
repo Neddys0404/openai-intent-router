@@ -11,17 +11,21 @@ class ModelDefinition:
     timeout: float = 600.0
     health_path: str = "/models"
     start_command: str | None = None
+    startup_timeout: float = 300.0
+    persistent: bool = False
 
 
 class ModelRegistry:
-    def __init__(self, raw_models: dict[str, Any]):
+    def __init__(self, raw_models: dict[str, Any], default_timeout: float = 600.0):
         self._models = {
             name: ModelDefinition(
                 name=name,
                 endpoint=spec["endpoint"].rstrip("/"),
-                timeout=float(spec.get("timeout", 600)),
+                timeout=float(spec.get("timeout", default_timeout)),
                 health_path=spec.get("health_path", "/models"),
                 start_command=spec.get("start_command"),
+                startup_timeout=float(spec.get("startup_timeout", 300)),
+                persistent=bool(spec.get("persistent", False)),
             )
             for name, spec in raw_models.items()
         }

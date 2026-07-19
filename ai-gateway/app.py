@@ -19,11 +19,15 @@ async def _idle_monitor() -> None:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    model_manager.validate_configuration()
     task = asyncio.create_task(_idle_monitor())
-    yield
-    task.cancel()
-    with suppress(asyncio.CancelledError):
-        await task
+    try:
+        yield
+    finally:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+        await model_manager.shutdown()
 
 
 app = FastAPI(title="AI Gateway", version="1.0.0", lifespan=lifespan)
