@@ -1,18 +1,69 @@
 # Local AI Router
 
-A self-hosted OpenAI-compatible AI gateway for routing requests between local llama.cpp model servers. It lets an OpenAI-compatible client such as Odysseus use one stable API endpoint while the gateway selects, starts, stops, and proxies the appropriate local model.
+A **self-hosted OpenAI-compatible AI gateway** designed specifically for **local AI hosting**. It intelligently routes requests between multiple local `llama.cpp` model servers so that **only the model currently needed occupies GPU VRAM**.
+
+The gateway presents a **single, stable OpenAI-compatible API endpoint**, allowing applications such as **Odysseus** to connect **without any modifications, plugins, or code changes**. From the client's perspective, it behaves exactly like a standard OpenAI API server while transparently selecting, starting, stopping, and proxying requests to the appropriate local model.
 
 > This project was generated with **GPT 5.6 Terra**.
 
+---
+
+## Why this project exists
+
+Modern local LLM deployments often consist of multiple specialized models:
+
+- Chat and instruction models
+- Coding models
+- Vision models
+- Reasoning models
+
+Keeping every model loaded simultaneously quickly exhausts GPU VRAM, even on high-end hardware.
+
+**Local AI Router is built specifically to solve this problem.**
+
+Instead of permanently loading every model, it intelligently manages local model servers by:
+
+- keeping a lightweight routing model running continuously
+- loading only the required model into GPU memory
+- automatically unloading idle models after a configurable timeout
+- exposing a single OpenAI-compatible endpoint regardless of which model is currently active
+
+This allows a local AI workstation to host multiple large models while minimizing VRAM usage.
+
+---
+
+## Odysseus compatibility
+
+One of the primary goals of this project is seamless integration with **Odysseus**.
+
+Because the gateway implements the standard **OpenAI Chat Completions API**, **Odysseus works with it out of the box**.
+
+**No modifications to Odysseus are required.**
+
+Simply configure Odysseus to use the gateway's endpoint instead of a normal OpenAI-compatible server. The router handles all model selection and lifecycle management transparently, so Odysseus remains completely unaware that requests may be served by different local models.
+
+The gateway is also compatible with **any application that supports the OpenAI-compatible Chat Completions API**.
+
+---
+
 ## Project intention
 
-The project is designed for a local AI workstation that serves multiple specialised models without keeping every large model in VRAM.
+The project is designed for **local AI workstations** where multiple specialized models share limited GPU resources.
 
-- Present one OpenAI-compatible endpoint to clients.
-- Use a lightweight, persistent classifier to select the best route for ambiguous requests.
-- Start answer models only when needed and release their VRAM after an idle period.
-- Preserve optional conversation context with local session files.
-- Keep model servers private on loopback while exposing only the authenticated gateway.
+Its primary objective is to **maximize available VRAM** by ensuring that only the model currently serving requests remains loaded.
+
+The gateway provides:
+
+- A single OpenAI-compatible endpoint for all clients.
+- Full compatibility with Odysseus and other OpenAI-compatible applications.
+- Intelligent request routing using a lightweight, persistent classifier.
+- Automatic loading and unloading of local `llama.cpp` model servers.
+- Optional local conversation persistence.
+- Secure isolation of backend model servers from the network.
+
+This enables users to switch seamlessly between chat, coding, reasoning, vision, or other specialized local models without permanently dedicating GPU memory to every model.
+
+---
 
 ## Architecture
 
@@ -43,39 +94,50 @@ CPU, persistent                 |
 
 The classifier chooses a configured route when the client sends `"model": "auto"` or omits the model. An explicit `"model": "chat"` or `"model": "coder"` bypasses routing.
 
+---
+
 ## Key behavior
 
-- The gateway serializes model-serving requests, so it never unloads a model while it is generating a response.
-- The CPU classifier can remain loaded without consuming GPU VRAM.
-- Only one non-persistent, gateway-managed answer model is kept in VRAM at a time.
-- Gateway-owned llama.cpp processes are stopped after the configured idle timeout and during graceful shutdown.
-- Normal and streaming OpenAI-compatible chat completions are supported.
-- Sessions are stored locally under `ai-gateway/sessions/` when the caller includes `X-Session-ID`.
+- Presents one OpenAI-compatible API endpoint regardless of how many local models are available.
+- Saves GPU VRAM by loading only the required answer model.
+- Fully compatible with Odysseus without requiring any modifications.
+- Supports any OpenAI-compatible client.
+- Serializes model-serving requests, ensuring a model is never unloaded while generating a response.
+- Keeps the CPU classifier running without consuming GPU VRAM.
+- Automatically unloads idle models after a configurable timeout.
+- Supports both normal and streaming OpenAI-compatible Chat Completions.
+- Stores optional conversation sessions locally under `ai-gateway/sessions/` when the caller includes `X-Session-ID`.
+
+---
 
 ## Project layout
 
 ```text
 router/
-├── README.md                 # This project overview
-└── ai-gateway/               # Gateway application
+├── README.md                 # Project overview
+└── ai-gateway/
     ├── app.py                # FastAPI application entry point
     ├── config.yaml           # Models, routes, lifecycle, and security settings
     ├── api/                  # OpenAI, health, and tool endpoints
     ├── managers/             # Model lifecycle, sessions, routing
     ├── llm/                  # Classifier and upstream client
     ├── models/               # Model registry
-    ├── tools/                # Opt-in allowlisted local tools
+    ├── tools/                # Optional allowlisted local tools
     └── sessions/             # Runtime conversation data (not committed)
 ```
+
+---
 
 ## Security model
 
 - Set `AI_GATEWAY_API_KEY` before starting the service.
-- Bind llama.cpp servers to `127.0.0.1`.
-- Keep `tools.enabled: false` unless local tooling is explicitly needed.
-- Use a TLS reverse proxy before exposing the gateway outside a trusted LAN.
+- Bind all `llama.cpp` model servers to `127.0.0.1`.
+- Keep `tools.enabled: false` unless local tooling is explicitly required.
+- Place a TLS reverse proxy in front of the gateway before exposing it outside a trusted LAN.
 - Grant the runtime account read access to model files and write access only to the session directory.
+
+---
 
 ## Running the gateway
 
-Refer to [the gateway README](ai-gateway/README.md) for Linux environment setup, model configuration, API-key configuration, and launch commands.
+Refer to [the gateway README](ai-gateway/README.md) for Linux environment setup, model configuration, API-key configuration, and launch instructions.
