@@ -15,7 +15,12 @@ from managers.session_manager import SessionManager
 router = APIRouter()
 client = UpstreamClient()
 gateway_config = model_manager.config.get("gateway", {})
-router_manager = RouterManager(model_manager.config.get("routes", {}))
+router_manager = RouterManager(
+    model_manager.config.get("routes", {}),
+    model_manager.registry,
+    gateway_config.get("classifier_model", "chat"),
+    gateway_config.get("classifier_timeout", 20),
+)
 session_manager = SessionManager(gateway_config.get("session_directory", "sessions"), gateway_config.get("max_recent_messages", 20))
 
 
@@ -33,7 +38,9 @@ async def chat_completions(request: Request):
         messages = body.get("messages")
         if not isinstance(messages, list) or not messages:
             raise ValueError("'messages' must be a non-empty list.")
-        model_name, route = router_manager.choose_model(body.get("model"), messages)
+        if not body.get("model") or body.get("model") in {"auto", "gateway"}:
+            await model_manager.get_endpoint(router_manager.classifier_model)
+        model_name, route = await router_manager.choose_model(body.get("model"), messages)
         session_id = request.headers.get("x-session-id")
         if session_id:
             body["messages"] = await session_manager.context(session_id, messages)
