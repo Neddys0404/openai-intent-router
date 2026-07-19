@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import subprocess
 import time
 from pathlib import Path
@@ -18,7 +19,8 @@ class ModelManager:
         self.registry = ModelRegistry(self.config.get("models", {}))
         self.models = {name: self.registry.get(name) for name in self.registry.names()}
         self.active_model: str | None = None
-        self.last_used: float | None = None
+        self.last_used: dict[str, float] = {}
+        self._processes: dict[str, subprocess.Popen] = {}
         self.requests = 0
         self.started_at = time.monotonic()
         self._lock = asyncio.Lock()
@@ -42,23 +44,55 @@ class ModelManager:
             if not await self.is_running(model_name):
                 if not model.start_command:
                     raise RuntimeError(f"Model '{model_name}' is unavailable at {model.endpoint}. Start its server or configure start_command.")
-                subprocess.Popen(model.start_command, shell=True)  # Config is operator-controlled.
+                # Keep only one gateway-managed model resident, avoiding VRAM contention.
+                for loaded_name in list(self._processes):
+                    if loaded_name != model_name:
+                        await self.unload_model(loaded_name)
+                await self.unload_model(model_name)
+                self._processes[model_name] = subprocess.Popen(model.start_command, shell=True)  # Config is operator-controlled.
                 for _ in range(30):
                     await asyncio.sleep(1)
                     if await self.is_running(model_name):
                         break
                 else:
                     raise RuntimeError(f"Model '{model_name}' did not become ready.")
-            self.active_model, self.last_used = model_name, time.monotonic()
+            self.active_model = model_name
+            self.last_used[model_name] = time.monotonic()
             self.requests += 1
 
     async def unload_if_idle(self) -> None:
         timeout = float(self.config.get("gateway", {}).get("idle_timeout_seconds", 600))
-        if self.active_model and self.last_used and time.monotonic() - self.last_used > timeout:
+        now = time.monotonic()
+        for model_name, last_used in list(self.last_used.items()):
+            if now - last_used > timeout:
+                await self.unload_model(model_name)
+
+    async def unload_model(self, model_name: str) -> bool:
+        """Stop a server only when this gateway launched it, releasing its VRAM."""
+        process = self._processes.pop(model_name, None)
+        self.last_used.pop(model_name, None)
+        if self.active_model == model_name:
             self.active_model = None
+        if process is None or process.poll() is not None:
+            return False
+        if os.name == "nt":
+            # shell=True creates a command shell; /T also stops its llama-server child.
+            subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"], capture_output=True, check=False)
+        else:
+            process.terminate()
+            try:
+                process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                process.kill()
+        return True
 
     def health(self) -> dict[str, Any]:
-        return {"active_model": self.active_model, "requests": self.requests, "uptime_seconds": round(time.monotonic() - self.started_at, 1)}
+        return {
+            "active_model": self.active_model,
+            "managed_models": [name for name, process in self._processes.items() if process.poll() is None],
+            "requests": self.requests,
+            "uptime_seconds": round(time.monotonic() - self.started_at, 1),
+        }
 
 
 model_manager = ModelManager()

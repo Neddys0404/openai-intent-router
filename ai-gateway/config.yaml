@@ -1,5 +1,6 @@
 gateway:
   request_timeout: 600
+  # Stop gateway-started llama-server processes after this idle period, releasing VRAM.
   idle_timeout_seconds: 600
   session_directory: sessions
   max_recent_messages: 20
