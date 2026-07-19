@@ -34,7 +34,7 @@ models:
     start_command: >-
       ~/llama.cpp/build/bin/llama-server
       -m "/mnt/storage120/models/gemma-4-26B_q4_0-it.gguf"
-      -mmproj "/mnt/storage120/models/mmproj/gemma-4-26B-it-mmproj.gguf"
+      --mmproj "/mnt/storage120/models/mmproj/gemma-4-26B-it-mmproj.gguf"
       --host 127.0.0.1
       --port 8001
       -c 16384
@@ -54,7 +54,7 @@ models:
     start_command: >-
       ~/llama.cpp/build/bin/llama-server
       -m "/mnt/storage120/models/qwen3.5-4B-super-coder/qwen3.5-4B-super-coder.Q4_0.gguf"
-      -mmproj "/mnt/storage120/models/qwen3.5-4B-super-coder/qwen3.5-4B-super-coder.BF16-mmproj.gguf"
+      --mmproj "/mnt/storage120/models/qwen3.5-4B-super-coder/qwen3.5-4B-super-coder.BF16-mmproj.gguf"
       --host 127.0.0.1
       --port 8002
       -c 32768

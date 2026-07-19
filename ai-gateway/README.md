@@ -4,12 +4,13 @@ An OpenAI-compatible gateway for one or more llama.cpp-compatible servers. It ro
 
 ## Run
 
-1. Create and activate a virtual environment, then install dependencies:
+1. Create and activate a Python 3.10+ virtual environment, then install dependencies:
 
-   ```powershell
-   py -m venv .venv
-   .\.venv\Scripts\Activate.ps1
-   pip install -r requirements.txt
+   ```bash
+   python3 -m venv .venv
+   source .venv/bin/activate
+   python -m pip install --upgrade pip
+   python -m pip install -r requirements.txt
    ```
 
 2. Set the model endpoints (and optional `start_command` values) in `config.yaml`.
