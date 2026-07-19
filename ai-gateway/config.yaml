@@ -6,7 +6,7 @@ gateway:
   api_key: null # Set to require "Authorization: Bearer <key>".
   # This configured model makes route decisions for requests using model: auto.
   classifier_model: classifier
-  classifier_timeout: 10
+  classifier_timeout: 20
 
 models:
   classifier:
@@ -14,12 +14,12 @@ models:
     timeout: 30
     health_path: "/models"
     start_command: >-
-      llama-server
-      -m "D:\AI\Models\Your-Small-Instruct-Model.gguf"
-      --host 127.0.0.1
-      --port 8003
+      ~/llama.cpp/build/bin/llama-server
+      -m "/mnt/storage120/models/classfier/Your-Small-Instruct-Model.gguf"
+      --host 0.0.0.0
+      --port 9000
       -c 2048
-      -ngl 99
+      -ngl 0
 
   chat:
     endpoint: "http://localhost:8001/v1"
@@ -27,28 +27,45 @@ models:
     health_path: "/models"
     # Replace the executable and .gguf path with your installed locations.
     # start_command: >-
-    #   llama-server
-    #   -m "D:\\AI\\Models\\Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf"
+    #   ~/llama.cpp/build/bin/llama-server
+    #   -m "/mnt/storage120/models/gemma-4-26B_q4_0-it.gguf"
+    #   -mmproj "/mnt/storage120/models/mmproj/gemma-4-26B-it-mmproj.gguf"
     #   --host 127.0.0.1
     #   --port 8001
-    #   -c 8192
-    #   -ngl 99
+    #   -c 131072
+    #   --temp 0.6
+    #   --top-p 0.95
+    #   --top-k 20
+    #   --repeat-penalty 1.05
+    #   --batch-size 2048
+    #   --ubatch-size 512
+    #   --cache-type-k q8_0
+    #   --cache-type-v q8_0
+
   coder:
     endpoint: "http://localhost:8002/v1"
     timeout: 600
     health_path: "/models"
     # start_command: >-
-    #   llama-server
-    #   -m "D:\\AI\\Models\\Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf"
+    #   ~/llama.cpp/build/bin/llama-server
+    #   -m "/mnt/storage120/models/qwen3.5-4B-super-coder/qwen3.5-4B-super-coder.Q4_0.gguf"
+    #   -mmproj "/mnt/storage120/models/qwen3.5-4B-super-coder/qwen3.5-4B-super-coder.BF16-mmproj.gguf"
     #   --host 127.0.0.1
     #   --port 8002
-    #   -c 16384
-    #   -ngl 99
+    #   -c 32768
+    #   --temp 0.1
+    #   --top-p 0.9
+    #   --top-k 20
+    #   --repeat-penalty 1.02
+    #   --batch-size 2048
+    #   --ubatch-size 512
+    #   --cache-type-k q8_0
+    #   --cache-type-v q8_0
 
 routes:
   coding:
     model: coder
-    keywords: ["code", "program", "bug", "python", "javascript", "typescript", "docker", "git", "api"]
+    keywords: ["code", "program", "bug", "python", "javascript", "typescript", "docker", "git", "api", "cpp", "c++", "cmake", "esp-idf", "esp32", "bash", "shell", "systemd"]
   chat:
     model: chat
     keywords: []
