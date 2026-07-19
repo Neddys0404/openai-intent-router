@@ -21,7 +21,7 @@ models:
     health_path: "/models"
     start_command: >-
       ~/llama.cpp/build/bin/llama-server
-      -m "/mnt/storage120/models/classfier/Your-Small-Instruct-Model.gguf"
+      -m "/mnt/storage120/models/router/qwen2.5-3b-instruct-q4_k_m.gguf"
       --host 127.0.0.1
       --port 9000
       -c 2048
@@ -31,42 +31,41 @@ models:
     endpoint: "http://localhost:8001/v1"
     timeout: 600
     health_path: "/models"
-    # Replace the executable and .gguf path with your installed locations.
-    # start_command: >-
-    #   ~/llama.cpp/build/bin/llama-server
-    #   -m "/mnt/storage120/models/gemma-4-26B_q4_0-it.gguf"
-    #   -mmproj "/mnt/storage120/models/mmproj/gemma-4-26B-it-mmproj.gguf"
-    #   --host 127.0.0.1
-    #   --port 8001
-    #   -c 131072
-    #   --temp 0.6
-    #   --top-p 0.95
-    #   --top-k 20
-    #   --repeat-penalty 1.05
-    #   --batch-size 2048
-    #   --ubatch-size 512
-    #   --cache-type-k q8_0
-    #   --cache-type-v q8_0
+    start_command: >-
+      ~/llama.cpp/build/bin/llama-server
+      -m "/mnt/storage120/models/gemma-4-26B_q4_0-it.gguf"
+      -mmproj "/mnt/storage120/models/mmproj/gemma-4-26B-it-mmproj.gguf"
+      --host 127.0.0.1
+      --port 8001
+      -c 16384
+      --temp 0.6
+      --top-p 0.95
+      --top-k 20
+      --repeat-penalty 1.05
+      --batch-size 2048
+      --ubatch-size 512
+      --cache-type-k q8_0
+      --cache-type-v q8_0
 
   coder:
     endpoint: "http://localhost:8002/v1"
     timeout: 600
     health_path: "/models"
-    # start_command: >-
-    #   ~/llama.cpp/build/bin/llama-server
-    #   -m "/mnt/storage120/models/qwen3.5-4B-super-coder/qwen3.5-4B-super-coder.Q4_0.gguf"
-    #   -mmproj "/mnt/storage120/models/qwen3.5-4B-super-coder/qwen3.5-4B-super-coder.BF16-mmproj.gguf"
-    #   --host 127.0.0.1
-    #   --port 8002
-    #   -c 32768
-    #   --temp 0.1
-    #   --top-p 0.9
-    #   --top-k 20
-    #   --repeat-penalty 1.02
-    #   --batch-size 2048
-    #   --ubatch-size 512
-    #   --cache-type-k q8_0
-    #   --cache-type-v q8_0
+    start_command: >-
+      ~/llama.cpp/build/bin/llama-server
+      -m "/mnt/storage120/models/qwen3.5-4B-super-coder/qwen3.5-4B-super-coder.Q4_0.gguf"
+      -mmproj "/mnt/storage120/models/qwen3.5-4B-super-coder/qwen3.5-4B-super-coder.BF16-mmproj.gguf"
+      --host 127.0.0.1
+      --port 8002
+      -c 32768
+      --temp 0.1
+      --top-p 0.9
+      --top-k 20
+      --repeat-penalty 1.02
+      --batch-size 2048
+      --ubatch-size 512
+      --cache-type-k q8_0
+      --cache-type-v q8_0
 
 routes:
   coding:
