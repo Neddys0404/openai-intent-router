@@ -1,0 +1,9 @@
+models:
+  chat:
+    endpoint: "http://localhost:8001/v1"
+    timeout: 600
+
+routes:
+  chat:
+    model: chat
+    timeout: 600
