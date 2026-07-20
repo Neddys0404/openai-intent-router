@@ -40,5 +40,23 @@ Keep every llama.cpp server bound to `127.0.0.1`; the gateway is the only servic
 
 During graceful gateway shutdown, every model process started by the gateway is stopped and releases its VRAM. A `start_command` that exits immediately now fails fast with its exit code instead of waiting for the whole startup timeout.
 
+## Start automatically with tmux
+
+Create a private environment file for the required key, then restrict it to your account:
+
+```bash
+mkdir -p ~/.config/local-ai
+printf 'export AI_GATEWAY_API_KEY="replace-with-a-long-random-secret"\n' > ~/.config/local-ai/gateway.env
+chmod 600 ~/.config/local-ai/gateway.env
+```
+
+Add this line to `~/.bashrc` (change the path if you installed the project elsewhere):
+
+```bash
+source ~/router/ai-gateway/scripts/ensure-local-ai.sh
+```
+
+Each interactive Bash session then starts the gateway only if a tmux session called `local-ai` does not already exist. Inspect its live output with `tmux attach -t local-ai`, detach with `Ctrl-b d`, and read persistent output with `tail -f ~/router/ai-gateway/logs/gateway.log`.
+
 The gateway never executes arbitrary user shell input. Tool execution is disabled by default and command names are allowlisted in `config.yaml`.
 When enabled, `POST /tool/git` and `POST /tool/docker` accept a JSON body such as `{"command": "status"}`.
