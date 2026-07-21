@@ -24,6 +24,8 @@ An OpenAI-compatible gateway for one or more llama.cpp-compatible servers. It ro
 
 Use `POST /v1/chat/completions`, just as with the OpenAI API. Specify `chat` or `coder`, or use `auto` to use the configured routes. Send an `X-Session-ID` header to persist recent conversation context. API documentation is at `/docs`.
 
+Editor autocomplete clients that use the legacy OpenAI endpoint are also supported through `POST /v1/completions`. These requests are forwarded unchanged to the selected llama.cpp server, including `suffix` and streaming fields. Because a text-completions request has no chat messages to classify, it must include an explicit configured model such as `"model": "coder"`.
+
 Set `gateway.classifier_model` to a configured model name. That model receives the available route names and the latest conversation turns, and must return one route name. If it cannot be reached or replies with an invalid route, the gateway uses the configured keyword fallback.
 
 ## Idle VRAM release

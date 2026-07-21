@@ -42,7 +42,7 @@ Because the gateway implements the standard **OpenAI Chat Completions API**, **O
 
 Simply configure Odysseus to use the gateway's endpoint instead of a normal OpenAI-compatible server. The router handles all model selection and lifecycle management transparently, so Odysseus remains completely unaware that requests may be served by different local models.
 
-The gateway is also compatible with **any application that supports the OpenAI-compatible Chat Completions API**.
+The gateway is also compatible with applications that support the OpenAI-compatible Chat Completions API, as well as editor autocomplete clients that use the legacy `POST /v1/completions` endpoint.
 
 ---
 
