@@ -18,3 +18,17 @@ class UpstreamClient:
                 response.raise_for_status()
                 async for chunk in response.aiter_raw():
                     yield chunk
+
+    async def text_completion(self, endpoint: str, payload: dict[str, Any], timeout: float) -> dict[str, Any]:
+        """Proxy OpenAI's legacy text-completions API without changing its payload."""
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.post(f"{endpoint}/completions", json=payload)
+            response.raise_for_status()
+            return response.json()
+
+    async def stream_text_completion(self, endpoint: str, payload: dict[str, Any], timeout: float) -> AsyncIterator[bytes]:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            async with client.stream("POST", f"{endpoint}/completions", json=payload) as response:
+                response.raise_for_status()
+                async for chunk in response.aiter_raw():
+                    yield chunk

@@ -81,6 +81,16 @@ async def _stream_response(
             model_manager.release_request(model_name)
 
 
+async def _stream_text_completion_response(
+    endpoint: str, body: dict[str, Any], timeout: float, model_name: str
+):
+    try:
+        async for chunk in client.stream_text_completion(endpoint, body, timeout):
+            yield chunk
+    finally:
+        model_manager.release_request(model_name)
+
+
 @router.post("/chat/completions")
 async def chat_completions(request: Request):
     _authorize(request)
@@ -118,6 +128,50 @@ async def chat_completions(request: Request):
             assistant_messages = [choice.get("message") for choice in response.get("choices", []) if choice.get("message")]
             await session_manager.save(session_id, original_messages + assistant_messages)
         return response
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except RuntimeError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    except httpx.HTTPStatusError as error:
+        raise HTTPException(status_code=error.response.status_code, detail=error.response.text) from error
+    except httpx.HTTPError as error:
+        raise HTTPException(status_code=502, detail=f"Upstream request failed: {error}") from error
+    finally:
+        if not streaming:
+            model_manager.release_request(model_name)
+
+
+@router.post("/completions")
+async def completions(request: Request):
+    """Proxy the OpenAI text-completions API used by editor autocomplete clients.
+
+    Text completions have no chat messages to classify, so callers must select a
+    configured model explicitly (for example, ``model: \"coder\"``).
+    """
+    _authorize(request)
+    try:
+        body: dict[str, Any] = await request.json()
+        if "prompt" not in body:
+            raise ValueError("'prompt' is required for text completions.")
+        model_name = body.get("model")
+        if not isinstance(model_name, str) or not model_name or model_name in {"auto", "gateway"}:
+            raise ValueError("Text completions require an explicit configured model (for example, 'coder').")
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+    await model_manager.acquire_request()
+    streaming = False
+    try:
+        endpoint = await model_manager.get_endpoint(model_name)
+        timeout = model_manager.registry.get(model_name).timeout
+        if body.get("stream"):
+            streaming = True
+            return StreamingResponse(
+                _stream_text_completion_response(endpoint, body, timeout, model_name),
+                media_type="text/event-stream",
+                headers={"X-Model-Route": "explicit", "Cache-Control": "no-cache"},
+            )
+        return await client.text_completion(endpoint, body, timeout)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     except RuntimeError as error:

@@ -15,5 +15,6 @@ if [[ -z "${AI_GATEWAY_API_KEY:-}" ]]; then
 fi
 
 mkdir -p logs
-echo "[$(date --iso-8601=seconds)] Starting AI Gateway on port 8000"
+timestamp="$(date '+%Y-%m-%dT%H:%M:%S%z')"
+echo "[$timestamp] Starting AI Gateway on port 8000"
 .venv/bin/python -m uvicorn app:app --host 0.0.0.0 --port 8000 --log-level info --access-log 2>&1 | tee -a logs/gateway.log
