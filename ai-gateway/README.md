@@ -67,7 +67,7 @@ When enabled, `POST /tool/git` and `POST /tool/docker` accept a JSON body such a
 
 `POST /v1/images/generations` exposes the configured `stable-diffusion.cpp` Qwen Image runtime through the OpenAI Images API. The sample `image_generation` configuration is populated from the local paths in this project; update it if your runtime paths differ. The gateway passes the prompt as one command argument (not through a shell), creates a PNG and log file in `output_directory`, and unloads a gateway-managed GPU answer model before running the job.
 
-When image generation is enabled, its configured `image_generation.model` ID is also advertised by `GET /v1/models`. Clients such as Odysseus can select that ID as their **Image Model**; it is not a chat-completion model.
+When image generation is enabled, its configured `image_generation.model` ID and optional `aliases` are advertised by `GET /v1/models`. Clients such as Odysseus can select the ID as their **Image Model**; it is not a chat-completion model. The sample configuration exposes `gpt-image-1` as an alias because Odysseus auto-detects that naming pattern, while the actual local runtime remains Qwen Image.
 
 For example:
 

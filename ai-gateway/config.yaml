@@ -83,6 +83,8 @@ image_generation:
   # Advertised through /v1/models for clients such as Odysseus. This ID is for
   # the Images API only; do not select it for chat completions.
   model: qwen-image-2512
+  # Compatibility ID for clients that only auto-detect OpenAI image-model names.
+  aliases: ["gpt-image-1"]
   sd_cli: "/home/ned/stable-diffusion.cpp/build/bin/sd-cli"
   diffusion_model: "/mnt/storage120/models/qwen-image-2512/qwen-image-2512-Q4_K_M.gguf"
   vae: "/mnt/storage120/models/qwen-image-2512/vae/qwen_image_vae.safetensors"

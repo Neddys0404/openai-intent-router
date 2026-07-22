@@ -195,6 +195,12 @@ async def list_models(request: Request):
     ]
     image_config = model_manager.config.get("image_generation", {})
     image_model = image_config.get("model")
-    if image_config.get("enabled") and isinstance(image_model, str) and image_model:
-        models.append({"id": image_model, "object": "model", "owned_by": "ai-gateway-image"})
+    image_ids = [image_model]
+    aliases = image_config.get("aliases", [])
+    if isinstance(aliases, list):
+        image_ids.extend(aliases)
+    if image_config.get("enabled"):
+        for image_id in image_ids:
+            if isinstance(image_id, str) and image_id and not any(model["id"] == image_id for model in models):
+                models.append({"id": image_id, "object": "model", "owned_by": "ai-gateway-image"})
     return {"object": "list", "data": models}
