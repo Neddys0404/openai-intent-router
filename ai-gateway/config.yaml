@@ -90,9 +90,15 @@ image_generation:
   vae: "/mnt/storage120/models/qwen-image-2512/vae/qwen_image_vae.safetensors"
   llm: "/mnt/storage120/models/qwen-image-2512/vl/Qwen2.5-VL-7B-Instruct-UD-Q4_K_XL.gguf"
   output_directory: "/home/ned/QwenGen"
-  # Uses the first CUDA GPU. Change this for a different GPU, or remove it to
-  # inherit CUDA_VISIBLE_DEVICES from the service environment.
-  cuda_visible_devices: "0"
+  # The Qwen Image stack needs about 19 GB VRAM and will not fit on the 4 GB
+  # GTX 1650 Ti. This CPU profile avoids CUDA allocations; expect it to be
+  # substantially slower. Set cpu_only: false and tune the offload options if
+  # you later move image generation to a GPU with enough VRAM.
+  cpu_only: true
+  offload_to_cpu: true
+  clip_on_cpu: true
+  vae_on_cpu: true
+  # threads: 8  # Optional: cap CPU threads; omitted uses all physical cores.
   timeout_seconds: 900
   max_prompt_characters: 8000
   allowed_sizes: ["1024x1024"]

@@ -92,8 +92,20 @@ class ImageGenerator:
             "-p", prompt,
             "-o", str(output_file),
         ]
+        if self.config.get("offload_to_cpu", False):
+            command.append("--offload-to-cpu")
+        if self.config.get("clip_on_cpu", False):
+            command.append("--clip-on-cpu")
+        if self.config.get("vae_on_cpu", False):
+            command.append("--vae-on-cpu")
+        threads = self.config.get("threads")
+        if threads is not None:
+            command.extend(["--threads", str(threads)])
         environment = os.environ.copy()
-        cuda_visible_devices = self.config.get("cuda_visible_devices")
-        if cuda_visible_devices is not None:
-            environment["CUDA_VISIBLE_DEVICES"] = str(cuda_visible_devices)
+        if self.config.get("cpu_only", False):
+            environment["CUDA_VISIBLE_DEVICES"] = ""
+        else:
+            cuda_visible_devices = self.config.get("cuda_visible_devices")
+            if cuda_visible_devices is not None:
+                environment["CUDA_VISIBLE_DEVICES"] = str(cuda_visible_devices)
         return ImageJob(command, environment, output_file, log_file, float(self.config.get("timeout_seconds", 900)))

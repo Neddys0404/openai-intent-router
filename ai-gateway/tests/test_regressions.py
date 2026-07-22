@@ -60,11 +60,33 @@ class ImageGeneratorTests(unittest.TestCase):
                 "llm": str(paths["llm.gguf"]),
                 "output_directory": str(root / "output"),
                 "cuda_visible_devices": "0",
+                "offload_to_cpu": True,
+                "clip_on_cpu": True,
+                "vae_on_cpu": True,
             })
             job = generator.prepare("a test image", "1024x1024")
             self.assertIn("a test image", job.command)
             self.assertEqual(job.environment["CUDA_VISIBLE_DEVICES"], "0")
             self.assertEqual(job.output_file.parent, root / "output")
+            self.assertTrue({"--offload-to-cpu", "--clip-on-cpu", "--vae-on-cpu"}.issubset(job.command))
+
+    def test_cpu_only_hides_cuda_devices(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            paths = {name: root / name for name in ("sd-cli", "model.gguf", "vae.safetensors", "llm.gguf")}
+            for path in paths.values():
+                path.touch()
+            generator = ImageGenerator({
+                "enabled": True,
+                "sd_cli": str(paths["sd-cli"]),
+                "diffusion_model": str(paths["model.gguf"]),
+                "vae": str(paths["vae.safetensors"]),
+                "llm": str(paths["llm.gguf"]),
+                "output_directory": str(root / "output"),
+                "cpu_only": True,
+            })
+            job = generator.prepare("a test image", "1024x1024")
+            self.assertEqual(job.environment["CUDA_VISIBLE_DEVICES"], "")
 
 
 if __name__ == "__main__":

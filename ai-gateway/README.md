@@ -80,7 +80,7 @@ curl http://localhost:8000/v1/images/generations \
 
 The default response contains inline `b64_json`, which works with clients that do not replay the gateway's authorization header for an image URL. Request `{"response_format":"url"}` only when the client will send the bearer token while downloading the returned URL. Only one image per request is supported (`n: 1`).
 
-The sample configuration uses CUDA GPU `0`. Change `image_generation.cuda_visible_devices` if the image runtime should use another GPU, or remove that value to inherit the service environment.
+The sample configuration uses a CPU-only profile because Qwen Image needs far more than 4 GB VRAM. It sets `CUDA_VISIBLE_DEVICES` empty and passes `--offload-to-cpu`, `--clip-on-cpu`, and `--vae-on-cpu` to `sd-cli`; generation will be substantially slower. For a machine with sufficient VRAM, set `image_generation.cpu_only: false` and configure the GPU/offload options for that machine.
 
 ## Persistent Linux startup
 
