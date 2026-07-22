@@ -84,7 +84,7 @@ image_generation:
   diffusion_model: "/mnt/storage120/models/qwen-image-2512/qwen-image-2512-Q4_K_M.gguf"
   vae: "/mnt/storage120/models/qwen-image-2512/vae/qwen_image_vae.safetensors"
   llm: "/mnt/storage120/models/qwen-image-2512/vl/Qwen2.5-VL-7B-Instruct-UD-Q4_K_XL.gguf"
-  output_directory: "/mnt/storage500/data/media/JunRen/QwenGen"
+  output_directory: "/home/ned/QwenGen"
   # Uses the first CUDA GPU. Change this for a different GPU, or remove it to
   # inherit CUDA_VISIBLE_DEVICES from the service environment.
   cuda_visible_devices: "0"

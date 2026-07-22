@@ -91,3 +91,21 @@ loginctl enable-linger "$USER" # optional: keep it running after logout
 ```
 
 The installer uses the current checkout path and the same `AI_GATEWAY_ENV_FILE` / `~/.config/local-ai/gateway.env` credentials file as the tmux helper. Check it with `systemctl --user status ai-gateway` and logs with `journalctl --user -u ai-gateway -f`.
+
+## Persistent macOS startup
+
+On macOS, use the included `launchd` user agent. It starts at user login, restarts if the gateway exits, and keeps running after Terminal or SSH disconnects while that user session remains active:
+
+```bash
+cd ~/router/ai-gateway
+bash scripts/install-launchd-user-service.sh
+```
+
+Check its state and live logs with:
+
+```bash
+launchctl print "gui/$(id -u)/local.ai-gateway"
+tail -f logs/launchd.out.log logs/launchd.err.log
+```
+
+The gateway virtual environment is OS-specific: create a fresh `.venv` and install `requirements.txt` on the Mac. Update all `config.yaml` model, VAE, binary, and output paths to paths that exist on that Mac before installing the service. This is a user agent, so install it while logged in to the Mac desktop user; it launches automatically at subsequent logins.
