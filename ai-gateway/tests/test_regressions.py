@@ -3,6 +3,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from tools.image_tools import ImageGenerator
+
 from api.openai import _stream_content
 from managers.session_manager import SessionManager
 
@@ -29,6 +31,40 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
             await manager.save("example", [{"role": "user", "content": "third"}, {"role": "assistant", "content": "three"}])
             saved = json.loads((Path(directory) / "example.json").read_text(encoding="utf-8"))
             self.assertIn("first", saved["summary"])
+
+
+class ImageGeneratorTests(unittest.TestCase):
+    def test_rejects_invalid_size_before_invoking_runtime(self):
+        with tempfile.TemporaryDirectory() as directory:
+            generator = ImageGenerator({"enabled": True, "output_directory": directory, "allowed_sizes": ["square"]})
+            with self.assertRaisesRegex(ValueError, "WIDTHxHEIGHT"):
+                generator.prepare("a test image", "square")
+
+    def test_rejects_disabled_generation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            generator = ImageGenerator({"enabled": False, "output_directory": directory})
+            with self.assertRaisesRegex(ValueError, "disabled"):
+                generator.prepare("a test image", "1024x1024")
+
+    def test_prepares_argument_list_and_cuda_environment(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            paths = {name: root / name for name in ("sd-cli", "model.gguf", "vae.safetensors", "llm.gguf")}
+            for path in paths.values():
+                path.touch()
+            generator = ImageGenerator({
+                "enabled": True,
+                "sd_cli": str(paths["sd-cli"]),
+                "diffusion_model": str(paths["model.gguf"]),
+                "vae": str(paths["vae.safetensors"]),
+                "llm": str(paths["llm.gguf"]),
+                "output_directory": str(root / "output"),
+                "cuda_visible_devices": "0",
+            })
+            job = generator.prepare("a test image", "1024x1024")
+            self.assertIn("a test image", job.command)
+            self.assertEqual(job.environment["CUDA_VISIBLE_DEVICES"], "0")
+            self.assertEqual(job.output_file.parent, root / "output")
 
 
 if __name__ == "__main__":

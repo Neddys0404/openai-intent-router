@@ -122,6 +122,12 @@ class ModelManager:
                 if not self.registry.get(model_name).persistent and now - last_used > timeout:
                     await self.unload_model(model_name)
 
+    async def unload_nonpersistent_models(self) -> None:
+        """Release gateway-owned GPU answer models for an external GPU workload."""
+        for model_name in list(self._processes):
+            if not self.registry.get(model_name).persistent:
+                await self.unload_model(model_name)
+
     async def unload_model(self, model_name: str) -> bool:
         """Stop a gateway-owned process group, releasing the model's VRAM."""
         process = self._processes.pop(model_name, None)

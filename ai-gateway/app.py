@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager, suppress
 from fastapi import FastAPI
 
 from api.health import router as health_router
+from api.images import image_generator, router as images_router
 from api.openai import router as openai_router
 from api.tools import router as tools_router
 from managers.model_manager import model_manager
@@ -20,6 +21,7 @@ async def _idle_monitor() -> None:
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     model_manager.validate_configuration()
+    image_generator.validate_configuration()
     task = asyncio.create_task(_idle_monitor())
     try:
         yield
@@ -32,6 +34,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="AI Gateway", version="1.0.0", lifespan=lifespan)
 app.include_router(openai_router, prefix="/v1", tags=["OpenAI-compatible API"])
+app.include_router(images_router, prefix="/v1/images", tags=["OpenAI-compatible image API"])
 app.include_router(health_router, prefix="/health", tags=["Operations"])
 app.include_router(tools_router, prefix="/tool", tags=["Local tools"])
 

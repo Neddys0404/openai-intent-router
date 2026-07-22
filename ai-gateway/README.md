@@ -46,7 +46,7 @@ Create a private environment file for the required key, then restrict it to your
 
 ```bash
 mkdir -p ~/.config/local-ai
-printf 'export AI_GATEWAY_API_KEY="replace-with-a-long-random-secret"\n' > ~/.config/local-ai/gateway.env
+printf 'AI_GATEWAY_API_KEY="replace-with-a-long-random-secret"\n' > ~/.config/local-ai/gateway.env
 chmod 600 ~/.config/local-ai/gateway.env
 ```
 
@@ -60,3 +60,32 @@ Each interactive Bash session then starts the gateway only if a tmux session cal
 
 The gateway never executes arbitrary user shell input. Tool execution is disabled by default and command names are allowlisted in `config.yaml`.
 When enabled, `POST /tool/git` and `POST /tool/docker` accept a JSON body such as `{"command": "status"}`.
+
+## Image generation
+
+`POST /v1/images/generations` exposes the configured `stable-diffusion.cpp` Qwen Image runtime through the OpenAI Images API. The sample `image_generation` configuration is populated from the local paths in this project; update it if your runtime paths differ. The gateway passes the prompt as one command argument (not through a shell), creates a PNG and log file in `output_directory`, and unloads a gateway-managed GPU answer model before running the job.
+
+For example:
+
+```bash
+curl http://localhost:8000/v1/images/generations \
+  -H "Authorization: Bearer $AI_GATEWAY_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"prompt":"a cozy reading nook in soft morning light","size":"1024x1024"}'
+```
+
+The default response contains inline `b64_json`, which works with clients that do not replay the gateway's authorization header for an image URL. Request `{"response_format":"url"}` only when the client will send the bearer token while downloading the returned URL. Only one image per request is supported (`n: 1`).
+
+The sample configuration uses CUDA GPU `0`. Change `image_generation.cuda_visible_devices` if the image runtime should use another GPU, or remove that value to inherit the service environment.
+
+## Persistent Linux startup
+
+For a machine that should restart the gateway after a reboot or crash, install the user-level systemd service instead of relying only on the interactive-shell tmux helper:
+
+```bash
+cd ~/router/ai-gateway
+bash scripts/install-systemd-user-service.sh
+loginctl enable-linger "$USER" # optional: keep it running after logout
+```
+
+The installer uses the current checkout path and the same `AI_GATEWAY_ENV_FILE` / `~/.config/local-ai/gateway.env` credentials file as the tmux helper. Check it with `systemctl --user status ai-gateway` and logs with `journalctl --user -u ai-gateway -f`.

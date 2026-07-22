@@ -9,7 +9,9 @@ env_file="${AI_GATEWAY_ENV_FILE:-$HOME/.config/local-ai/gateway.env}"
 # Keep the API key outside .bashrc and outside the repository.
 if [[ -f "$env_file" ]]; then
   # shellcheck disable=SC1090
+  set -a
   source "$env_file"
+  set +a
 fi
 
 if ! command -v tmux >/dev/null 2>&1; then

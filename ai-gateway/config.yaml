@@ -75,6 +75,27 @@ routes:
     model: chat
     keywords: []
 
+# OpenAI-compatible POST /v1/images/generations.  This runs sd-cli directly
+# (without a shell or tmux), logs each job under output_directory/logs, and
+# serializes access with the managed GPU models.
+image_generation:
+  enabled: true
+  sd_cli: "/home/ned/stable-diffusion.cpp/build/bin/sd-cli"
+  diffusion_model: "/mnt/storage120/models/qwen-image-2512/qwen-image-2512-Q4_K_M.gguf"
+  vae: "/mnt/storage120/models/qwen-image-2512/vae/qwen_image_vae.safetensors"
+  llm: "/mnt/storage120/models/qwen-image-2512/vl/Qwen2.5-VL-7B-Instruct-UD-Q4_K_XL.gguf"
+  output_directory: "/mnt/storage500/data/media/JunRen/QwenGen"
+  # Uses the first CUDA GPU. Change this for a different GPU, or remove it to
+  # inherit CUDA_VISIBLE_DEVICES from the service environment.
+  cuda_visible_devices: "0"
+  timeout_seconds: 900
+  max_prompt_characters: 8000
+  allowed_sizes: ["1024x1024"]
+  cfg_scale: 2.5
+  sampling_method: euler
+  steps: 40
+  flow_shift: 3
+
 tools:
   enabled: false
   allowed_git_commands: ["status", "diff", "log", "branch"]
