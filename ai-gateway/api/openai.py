@@ -188,4 +188,13 @@ async def completions(request: Request):
 @router.get("/models")
 async def list_models(request: Request):
     _authorize(request)
-    return {"object": "list", "data": [{"id": name, "object": "model", "owned_by": "ai-gateway"} for name in model_manager.registry.names() if name != router_manager.classifier_model]}
+    models = [
+        {"id": name, "object": "model", "owned_by": "ai-gateway"}
+        for name in model_manager.registry.names()
+        if name != router_manager.classifier_model
+    ]
+    image_config = model_manager.config.get("image_generation", {})
+    image_model = image_config.get("model")
+    if image_config.get("enabled") and isinstance(image_model, str) and image_model:
+        models.append({"id": image_model, "object": "model", "owned_by": "ai-gateway-image"})
+    return {"object": "list", "data": models}
