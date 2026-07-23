@@ -15,7 +15,17 @@ An OpenAI-compatible gateway for one or more llama.cpp-compatible servers. It ro
 
 2. Set the model endpoints (and optional `start_command` values) in `config.yaml`.
 
-3. Set a strong API key and start the gateway:
+3. Copy the *_config_example.yaml according to device's OS Type, currently supported Linux and MacOS.
+
+   ```bash
+   cp linux_config_example.yaml config.yaml
+   ```
+   or if you are using MacOS
+   ```bash
+   cp macos_config_example.yaml config.yaml
+   ```
+
+4. Set a strong API key and start the gateway:
 
    ```bash
    export AI_GATEWAY_API_KEY="replace-with-a-long-random-secret"
