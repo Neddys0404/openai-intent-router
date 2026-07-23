@@ -12,6 +12,11 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
   echo "This installer must be run on macOS." >&2
   exit 1
 fi
+if [[ "$uid" -eq 0 ]]; then
+  echo "This installs a per-user LaunchAgent; do not run it with sudo." >&2
+  echo "Run: bash scripts/install-launchd-user-service.sh" >&2
+  exit 1
+fi
 if [[ ! -x "$gateway_dir/.venv/bin/python" ]]; then
   echo "Missing macOS Python environment: $gateway_dir/.venv/bin/python" >&2
   exit 1
