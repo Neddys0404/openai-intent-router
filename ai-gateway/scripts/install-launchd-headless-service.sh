@@ -3,35 +3,34 @@ set -euo pipefail
 
 gateway_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 label="local.ai-gateway"
-launch_agents_dir="$HOME/Library/LaunchAgents"
-plist="$launch_agents_dir/$label.plist"
+plist="/Library/LaunchDaemons/$label.plist"
 log_dir="$gateway_dir/logs"
-uid="$(id -u)"
+target_user="${SUDO_USER:-}"
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
   echo "This installer must be run on macOS." >&2
   exit 1
 fi
-if [[ "$uid" -eq 0 ]]; then
-  echo "This installs a per-user LaunchAgent; do not run it with sudo." >&2
-  echo "Run: bash scripts/install-launchd-user-service.sh" >&2
+if [[ "$(id -u)" -ne 0 || -z "$target_user" || "$target_user" == "root" ]]; then
+  echo "Run this headless-server installer with sudo from the target user's SSH session:" >&2
+  echo "  sudo bash scripts/install-launchd-headless-service.sh" >&2
   exit 1
 fi
-if ! launchctl print "gui/$uid" >/dev/null 2>&1; then
-  echo "No active macOS desktop login was found for this user." >&2
-  echo "Run this installer from Terminal while logged in at the Mac's desktop, not over SSH." >&2
-  exit 1
-fi
+
+target_home="$(dscl . -read "/Users/$target_user" NFSHomeDirectory | awk '{print $2}')"
+env_file="${AI_GATEWAY_ENV_FILE:-$target_home/.config/local-ai/gateway.env}"
+
 if [[ ! -x "$gateway_dir/.venv/bin/python" ]]; then
   echo "Missing macOS Python environment: $gateway_dir/.venv/bin/python" >&2
   exit 1
 fi
-if [[ ! -f "${AI_GATEWAY_ENV_FILE:-$HOME/.config/local-ai/gateway.env}" ]]; then
-  echo "Missing environment file: ${AI_GATEWAY_ENV_FILE:-$HOME/.config/local-ai/gateway.env}" >&2
+if [[ ! -f "$env_file" ]]; then
+  echo "Missing environment file: $env_file" >&2
   exit 1
 fi
 
-mkdir -p "$launch_agents_dir" "$log_dir"
+mkdir -p "$log_dir"
+chown "$target_user" "$log_dir"
 cat > "$plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -46,6 +45,15 @@ cat > "$plist" <<EOF
   </array>
   <key>WorkingDirectory</key>
   <string>$gateway_dir</string>
+  <key>UserName</key>
+  <string>$target_user</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HOME</key>
+    <string>$target_home</string>
+    <key>AI_GATEWAY_ENV_FILE</key>
+    <string>$env_file</string>
+  </dict>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
@@ -60,11 +68,13 @@ cat > "$plist" <<EOF
 </plist>
 EOF
 
+chown root:wheel "$plist"
+chmod 644 "$plist"
 plutil -lint "$plist"
-launchctl bootout "gui/$uid/$label" 2>/dev/null || true
-launchctl bootstrap "gui/$uid" "$plist"
-launchctl kickstart -k "gui/$uid/$label"
+launchctl bootout "system/$label" 2>/dev/null || true
+launchctl bootstrap system "$plist"
+launchctl kickstart -k "system/$label"
 
-echo "Installed and started $label."
-echo "Status: launchctl print gui/$uid/$label"
+echo "Installed and started $label as $target_user."
+echo "Status: launchctl print system/$label"
 echo "Logs:   tail -f '$log_dir/launchd.out.log' '$log_dir/launchd.err.log'"

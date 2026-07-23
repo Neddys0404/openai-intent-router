@@ -120,4 +120,22 @@ launchctl print "gui/$(id -u)/local.ai-gateway"
 tail -f logs/launchd.out.log logs/launchd.err.log
 ```
 
-The gateway virtual environment is OS-specific: create a fresh `.venv` and install `requirements.txt` on the Mac. Update all `config.yaml` model, VAE, binary, and output paths to paths that exist on that Mac before installing the service. This is a user agent, so install it while logged in to the Mac desktop user; it launches automatically at subsequent logins.
+The gateway virtual environment is OS-specific: create a fresh `.venv` and install `requirements.txt` on the Mac. Update all `config.yaml` model, VAE, binary, and output paths to paths that exist on that Mac before installing the service. This is a user agent, so install it while logged in to the Mac desktop user using Terminal, not through SSH; it launches automatically at subsequent logins. A headless Mac requires a separate system LaunchDaemon rather than this user agent.
+
+## Persistent headless macOS startup
+
+For a Mac used as a headless server, install the system LaunchDaemon from an SSH session. It runs the gateway as the SSH user, restarts it after failure, and continues running after SSH disconnects and across reboots:
+
+```bash
+cd ~/router/ai-gateway
+sudo bash scripts/install-launchd-headless-service.sh
+```
+
+Check the daemon and its logs with:
+
+```bash
+sudo launchctl print system/local.ai-gateway
+tail -f logs/launchd.out.log logs/launchd.err.log
+```
+
+Do not also install the user LaunchAgent on the same machine; both services use port 8000.
