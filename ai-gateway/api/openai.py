@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
+import time
 from pathlib import Path
 from typing import Any
 
@@ -9,13 +11,17 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 import httpx
 
+from api.auth import authorize
 from llm.client import UpstreamClient
+from llm.prompt_refiner import ImagePromptRefiner
+from api.images import generate_image
 from managers.model_manager import model_manager
 from managers.router_manager import RouterManager
 from managers.session_manager import SessionManager
 
 router = APIRouter()
 client = UpstreamClient()
+logger = logging.getLogger(__name__)
 gateway_config = model_manager.config.get("gateway", {})
 router_manager = RouterManager(
     model_manager.config.get("routes", {}),
@@ -23,6 +29,7 @@ router_manager = RouterManager(
     gateway_config.get("classifier_model", "chat"),
     gateway_config.get("classifier_timeout", 20),
 )
+prompt_refiner = ImagePromptRefiner(model_manager.config.get("prompt_refiner", {}), client)
 session_directory = Path(gateway_config.get("session_directory", "sessions"))
 if not session_directory.is_absolute():
     session_directory = Path(__file__).parents[1] / session_directory
@@ -33,6 +40,19 @@ def _authorize(request: Request) -> None:
     api_key = gateway_config.get("api_key")
     if api_key and request.headers.get("authorization") != f"Bearer {api_key}":
         raise HTTPException(status_code=401, detail="Invalid API key")
+
+
+def _prompt_from_message(message: dict[str, Any]) -> str:
+    content = message.get("content")
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "\n".join(
+            item["text"]
+            for item in content
+            if isinstance(item, dict) and item.get("type") == "text" and isinstance(item.get("text"), str)
+        )
+    return ""
 
 
 def _stream_content(chunk: bytes, buffer: bytes) -> tuple[bytes, list[str], bool]:
@@ -93,7 +113,7 @@ async def _stream_text_completion_response(
 
 @router.post("/chat/completions")
 async def chat_completions(request: Request):
-    _authorize(request)
+    authorize(request)
     try:
         body: dict[str, Any] = await request.json()
         original_messages = body.get("messages")
@@ -113,6 +133,46 @@ async def chat_completions(request: Request):
         if not body.get("model") or body.get("model") in {"auto", "gateway"}:
             await model_manager.get_endpoint(router_manager.classifier_model)
         model_name, route = await router_manager.choose_model(body.get("model"), routing_messages)
+        if route == "image_gen":
+            if body.get("n", 1) != 1:
+                raise HTTPException(status_code=400, detail="Classified image generation supports only n=1.")
+            logger.info("Intent classified: image_gen")
+            refiner_config = model_manager.config.get("prompt_refiner", {})
+            original_prompt = next(
+                (_prompt_from_message(message) for message in reversed(routing_messages) if message.get("role") == "user"),
+                "",
+            )
+            if not original_prompt.strip():
+                raise HTTPException(status_code=400, detail="Image generation requires a text prompt.")
+            refined_prompt = original_prompt
+            refinement_started = time.monotonic()
+            try:
+                if not refiner_config.get("enabled", True):
+                    raise RuntimeError("Image prompt refinement is disabled.")
+                refiner_model = router_manager.resolve_model(str(refiner_config.get("model", "chat")))
+                logger.info("Launching chat model for image prompt refinement: %s", refiner_model)
+                refiner_endpoint = await model_manager.get_endpoint(refiner_model)
+                refined_prompt = await prompt_refiner.refine(
+                    refiner_endpoint,
+                    original_prompt,
+                    model_manager.registry.get(refiner_model).timeout,
+                    refiner_model,
+                )
+                logger.info("Prompt refinement complete in %.3fs.", time.monotonic() - refinement_started)
+            except (RuntimeError, ValueError, httpx.HTTPError) as error:
+                logger.warning("Prompt refinement failed after %.3fs: %s", time.monotonic() - refinement_started, error)
+                if not refiner_config.get("fallback_to_original_prompt", True):
+                    raise HTTPException(status_code=502, detail="Image prompt refinement failed.") from error
+                logger.info("Using original prompt after refinement failure.")
+            logger.info("Sending refined prompt to image backend.")
+            response = await generate_image(
+                refined_prompt,
+                body.get("size", "1024x1024"),
+                body.get("response_format", "b64_json"),
+                str(request.base_url),
+            )
+            logger.info("Image generation finished.")
+            return response
         endpoint = await model_manager.get_endpoint(model_name)
         body["model"] = model_name
         timeout = model_manager.registry.get(model_name).timeout
@@ -148,7 +208,7 @@ async def completions(request: Request):
     Text completions have no chat messages to classify, so callers must select a
     configured model explicitly (for example, ``model: \"coder\"``).
     """
-    _authorize(request)
+    authorize(request)
     try:
         body: dict[str, Any] = await request.json()
         if "prompt" not in body:
@@ -187,7 +247,7 @@ async def completions(request: Request):
 
 @router.get("/models")
 async def list_models(request: Request):
-    _authorize(request)
+    authorize(request)
     models = [
         {"id": name, "object": "model", "owned_by": "ai-gateway"}
         for name in model_manager.registry.names()

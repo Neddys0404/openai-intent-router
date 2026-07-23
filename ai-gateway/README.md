@@ -32,7 +32,7 @@ An OpenAI-compatible gateway for one or more llama.cpp-compatible servers. It ro
    uvicorn app:app --host 0.0.0.0 --port 8000
    ```
 
-Use `POST /v1/chat/completions`, just as with the OpenAI API. Specify `chat` or `coder`, or use `auto` to use the configured routes. Send an `X-Session-ID` header to persist recent conversation context. API documentation is at `/docs`.
+Use `POST /v1/chat/completions`, just as with the OpenAI API. Specify `chat` or `coder`, or use `auto` to use the configured routes. Auto-routing supports `chat`, `coder`, and `image_gen`; classified image requests are refined by the configured chat model before they are sent to the image backend. Send an `X-Session-ID` header to persist recent conversation context. API documentation is at `/docs`.
 
 Editor autocomplete clients that use the legacy OpenAI endpoint are also supported through `POST /v1/completions`. These requests are forwarded unchanged to the selected llama.cpp server, including `suffix` and streaming fields. Because a text-completions request has no chat messages to classify, it must include an explicit configured model such as `"model": "coder"`.
 
@@ -77,6 +77,8 @@ When enabled, `POST /tool/git` and `POST /tool/docker` accept a JSON body such a
 
 `POST /v1/images/generations` exposes the configured `stable-diffusion.cpp` Qwen Image runtime through the OpenAI Images API. The sample `image_generation` configuration is populated from the local paths in this project; update it if your runtime paths differ. The gateway passes the prompt as one command argument (not through a shell), creates a PNG and log file in `output_directory`, and unloads a gateway-managed GPU answer model before running the job.
 
+The classified `image_gen` chat flow is separate from this direct endpoint. It loads or reuses `prompt_refiner.model`, reads its system prompt from `prompt_refiner.system_prompt_file`, and sends the refined prompt to the same image backend. Set `fallback_to_original_prompt: false` to return an error when refinement fails. Direct `POST /v1/images/generations` requests are never classified or refined.
+
 When image generation is enabled, its configured `image_generation.model` ID and optional `aliases` are advertised by `GET /v1/models`. Clients such as Odysseus can select the ID as their **Image Model**; it is not a chat-completion model. The sample configuration exposes `gpt-image-1` as an alias because Odysseus auto-detects that naming pattern, while the actual local runtime remains Qwen Image.
 
 For example:
@@ -89,6 +91,8 @@ curl http://localhost:8000/v1/images/generations \
 ```
 
 The default response contains inline `b64_json`, which works with clients that do not replay the gateway's authorization header for an image URL. Request `{"response_format":"url"}` only when the client will send the bearer token while downloading the returned URL. Only one image per request is supported (`n: 1`).
+
+Use the exported key as a bearer token in requests: `Authorization: Bearer $AI_GATEWAY_API_KEY`.
 
 The sample configuration uses a CPU-only profile because Qwen Image needs far more than 4 GB VRAM. It sets `CUDA_VISIBLE_DEVICES` empty and passes `--offload-to-cpu`, `--clip-on-cpu`, and `--vae-on-cpu` to `sd-cli`; generation will be substantially slower. For a machine with sufficient VRAM, set `image_generation.cpu_only: false` and configure the GPU/offload options for that machine.
 

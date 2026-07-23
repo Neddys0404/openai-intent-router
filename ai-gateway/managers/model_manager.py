@@ -42,10 +42,35 @@ class ModelManager:
         classifier_name = gateway_config.get("classifier_model")
         if classifier_name:
             self.registry.get(classifier_name)
-        for route_name, route in self.config.get("routes", {}).items():
+        routes = self.config.get("routes", {})
+        labels = gateway_config.get("classifier_labels")
+        if labels is not None:
+            if not isinstance(labels, list) or not all(isinstance(label, str) and label for label in labels):
+                raise RuntimeError("gateway.classifier_labels must be a list of non-empty strings.")
+            if set(labels) != set(routes):
+                raise RuntimeError("gateway.classifier_labels must match configured route names.")
+        for route_name, route in routes.items():
             if not isinstance(route, dict) or not route.get("model"):
                 raise RuntimeError(f"Route '{route_name}' must declare a model.")
             self.registry.get(route["model"])
+        refiner = self.config.get("prompt_refiner", {})
+        if not isinstance(refiner, dict):
+            raise RuntimeError("prompt_refiner must be a mapping.")
+        if refiner.get("enabled", False):
+            refiner_model = refiner.get("model")
+            if not isinstance(refiner_model, str) or not refiner_model:
+                raise RuntimeError("prompt_refiner.model must be configured when refinement is enabled.")
+            if isinstance(routes.get(refiner_model), dict):
+                refiner_model = routes[refiner_model].get("model")
+            self.registry.get(refiner_model)
+            prompt_file = refiner.get("system_prompt_file")
+            if not isinstance(prompt_file, str) or not prompt_file:
+                raise RuntimeError("prompt_refiner.system_prompt_file must be configured when refinement is enabled.")
+            prompt_path = Path(prompt_file).expanduser()
+            if not prompt_path.is_absolute():
+                prompt_path = Path(__file__).parents[1] / prompt_path
+            if not prompt_path.is_file():
+                raise RuntimeError(f"Configured prompt refiner system prompt does not exist: {prompt_path}")
 
     async def acquire_request(self) -> None:
         await self._request_lock.acquire()

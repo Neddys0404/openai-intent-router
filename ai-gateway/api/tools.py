@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 from managers.model_manager import model_manager
 from tools.tool_router import ToolRouter
-from .openai import _authorize
+from .auth import authorize
 
 router = APIRouter()
 tool_router = ToolRouter(model_manager.config.get("tools", {}))
@@ -19,7 +19,7 @@ class ToolRequest(BaseModel):
 
 @router.post("/{tool_name}")
 async def execute_tool(tool_name: str, request: ToolRequest, raw_request: Request):
-    _authorize(raw_request)
+    authorize(raw_request)
     try:
         return await asyncio.to_thread(tool_router.execute, tool_name, request.command)
     except ValueError as error:

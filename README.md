@@ -141,3 +141,5 @@ router/
 ## Running the gateway
 
 Refer to [the gateway README](ai-gateway/README.md) for Linux environment setup, model configuration, API-key configuration, and launch instructions.
+
+Automatic chat routing supports `chat`, `coder`, and `image_gen`. Classified image requests use the configured chat model to refine the prompt before sending it to the image backend. The direct `POST /v1/images/generations` endpoint remains an unmodified passthrough without classification or refinement. See [the gateway README](ai-gateway/README.md) for configuration details.

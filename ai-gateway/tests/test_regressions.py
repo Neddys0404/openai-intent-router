@@ -2,10 +2,17 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
+from fastapi import HTTPException
+from starlette.requests import Request
+
+from api.auth import authorize
 from tools.image_tools import ImageGenerator
 
 from api.openai import _stream_content
+from llm.prompt_refiner import ImagePromptRefiner
+from managers.router_manager import RouterManager
 from managers.session_manager import SessionManager
 
 
@@ -20,6 +27,14 @@ class StreamingTests(unittest.TestCase):
         self.assertEqual(content, ["lo"])
         self.assertTrue(done)
 
+    def test_authorization_uses_configured_bearer_key(self):
+        valid = Request({"type": "http", "headers": [(b"authorization", b"Bearer test-secret")]})
+        invalid = Request({"type": "http", "headers": [(b"authorization", b"******")]})
+        with patch("api.auth.model_manager.config", {"gateway": {"api_key": "test-secret"}}):
+            authorize(valid)
+            with self.assertRaises(HTTPException):
+                authorize(invalid)
+
 
 class SessionTests(unittest.IsolatedAsyncioTestCase):
     async def test_summary_survives_multiple_compactions(self):
@@ -31,6 +46,53 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
             await manager.save("example", [{"role": "user", "content": "third"}, {"role": "assistant", "content": "three"}])
             saved = json.loads((Path(directory) / "example.json").read_text(encoding="utf-8"))
             self.assertIn("first", saved["summary"])
+
+
+class PromptRefinerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_uses_external_system_prompt_and_returns_only_prompt(self):
+        with tempfile.TemporaryDirectory() as directory:
+            prompt_file = Path(directory) / "refiner.txt"
+            prompt_file.write_text("Refine image prompts.", encoding="utf-8")
+            client = AsyncMock()
+            client.completion.return_value = {
+                "choices": [{"message": {"content": '"A detailed sunset city"'}}]
+            }
+            refiner = ImagePromptRefiner({"system_prompt_file": str(prompt_file)}, client)
+
+            result = await refiner.refine("http://127.0.0.1:8001/v1", "a city at sunset", 10, "chat-model")
+
+            self.assertEqual(result, "A detailed sunset city")
+            payload = client.completion.call_args.args[1]
+            self.assertEqual(payload["messages"][0]["content"], "Refine image prompts.")
+            self.assertEqual(payload["messages"][1]["content"], "a city at sunset")
+            self.assertEqual(payload["model"], "chat-model")
+
+    async def test_removes_prompt_wrappers(self):
+        with tempfile.TemporaryDirectory() as directory:
+            prompt_file = Path(directory) / "refiner.txt"
+            prompt_file.write_text("Refine image prompts.", encoding="utf-8")
+            client = AsyncMock()
+            client.completion.return_value = {
+                "choices": [{"message": {"content": "```text\nFinal prompt: A detailed city\n```"}}]
+            }
+            refiner = ImagePromptRefiner({"system_prompt_file": str(prompt_file)}, client)
+
+            result = await refiner.refine("http://127.0.0.1:8001/v1", "a city", 10)
+
+            self.assertEqual(result, "A detailed city")
+
+
+class RouterManagerTests(unittest.TestCase):
+    def test_resolves_route_aliases_to_registry_models(self):
+        registry = type("Registry", (), {"get": lambda self, name: name})()
+        manager = RouterManager(
+            {"chat": {"model": "chat-model"}, "coder": {"model": "coder-model"}},
+            registry,
+            "classifier",
+        )
+
+        self.assertEqual(manager.resolve_model("chat"), "chat-model")
+        self.assertEqual(manager.resolve_model("coder-model"), "coder-model")
 
 
 class ImageGeneratorTests(unittest.TestCase):

@@ -13,9 +13,16 @@ class RouterManager:
         self.classifier_model = classifier_model
         self.classifier = LLMClassifier(routes, classifier_model, classifier_timeout)
 
+    def resolve_model(self, model_name: str) -> str:
+        route = self.routes.get(model_name)
+        if isinstance(route, dict) and route.get("model"):
+            return route["model"]
+        self.registry.get(model_name)
+        return model_name
+
     async def choose_model(self, requested_model: str | None, messages: list[dict[str, Any]]) -> tuple[str, str]:
         if requested_model and requested_model not in {"auto", "gateway"}:
-            return requested_model, "explicit"
+            return self.resolve_model(requested_model), "explicit"
         classifier_definition = self.registry.get(self.classifier_model)
         route = await self.classifier.classify(classifier_definition.endpoint, messages)
         try:
