@@ -14,8 +14,9 @@ class SessionManager:
         self._lock = asyncio.Lock()
 
     def _path(self, session_id: str) -> Path:
+        # Sanitize the ID to avoid path traversal and enforce a reasonable length.
         safe = "".join(char for char in session_id if char.isalnum() or char in "-_")
-        if not safe:
+        if not safe or len(safe) > 64:
             raise ValueError("Invalid session id.")
         return self.directory / f"{safe}.json"
 
@@ -51,4 +52,9 @@ class SessionManager:
             previous = await asyncio.to_thread(self._load, session_id)
             summary, recent = self._compact(previous["summary"], previous["messages"] + new_messages)
             payload = json.dumps({"summary": summary, "messages": recent}, ensure_ascii=False)
-            await asyncio.to_thread(self._path(session_id).write_text, payload, encoding="utf-8")
+            temp_path = self._path(session_id).with_suffix(".tmp")
+            await asyncio.to_thread(temp_path.write_text, payload, encoding="utf-8")
+            # Atomic replace
+            await asyncio.to_thread(temp_path.replace, self._path(session_id))
+            # Restrict permissions to owner only
+            await asyncio.to_thread(self._path(session_id).chmod, 0o600)

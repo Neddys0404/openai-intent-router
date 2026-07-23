@@ -15,6 +15,8 @@ from api.auth import authorize
 from llm.client import UpstreamClient
 from llm.prompt_refiner import ImagePromptRefiner
 from api.images import generate_image
+from .models import ChatCompletionRequest, CompletionRequest, ImageGenerationRequest, Message
+from tools.tool_router import ToolRouter
 from managers.model_manager import model_manager
 from managers.router_manager import RouterManager
 from managers.session_manager import SessionManager
@@ -30,6 +32,7 @@ router_manager = RouterManager(
     gateway_config.get("classifier_timeout", 20),
 )
 prompt_refiner = ImagePromptRefiner(model_manager.config.get("prompt_refiner", {}), client)
+tool_router = ToolRouter(model_manager.config.get("tools", {}))
 session_directory = Path(gateway_config.get("session_directory", "sessions"))
 if not session_directory.is_absolute():
     session_directory = Path(__file__).parents[1] / session_directory
@@ -115,26 +118,29 @@ async def _stream_text_completion_response(
 async def chat_completions(request: Request):
     authorize(request)
     try:
-        body: dict[str, Any] = await request.json()
-        original_messages = body.get("messages")
-        if not isinstance(original_messages, list) or not original_messages:
-            raise ValueError("'messages' must be a non-empty list.")
-    except ValueError as error:
+        body_obj = await request.json()
+        body = ChatCompletionRequest(**body_obj)
+        original_messages = [msg.dict() for msg in body.messages]
+    except Exception as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
+    # Acquire request queue semaphore before processing
+    await model_manager._request_semaphore.acquire()
     await model_manager.acquire_request()
     streaming = False
     model_name: str | None = None
     try:
         session_id = request.headers.get("x-session-id")
         if session_id:
-            body["messages"] = await session_manager.context(session_id, original_messages)
-        routing_messages = body["messages"]
-        if not body.get("model") or body.get("model") in {"auto", "gateway"}:
+            # ``SessionManager.context`` returns a list of dicts; convert back to Message objects.
+            context_msgs = await session_manager.context(session_id, original_messages)
+            body.messages = [Message(**m) for m in context_msgs]
+        routing_messages = [msg.dict() for msg in body.messages]
+        if not body.model or body.model in {"auto", "gateway"}:
             await model_manager.get_endpoint(router_manager.classifier_model)
-        model_name, route = await router_manager.choose_model(body.get("model"), routing_messages)
+        model_name, route = await router_manager.choose_model(body.model, routing_messages)
         if route == "image_gen":
-            if body.get("n", 1) != 1:
+            if body.n != 1:
                 raise HTTPException(status_code=400, detail="Classified image generation supports only n=1.")
             logger.info("Intent classified: image_gen")
             refiner_config = model_manager.config.get("prompt_refiner", {})
@@ -167,23 +173,24 @@ async def chat_completions(request: Request):
             logger.info("Sending refined prompt to image backend.")
             response = await generate_image(
                 refined_prompt,
-                body.get("size", "1024x1024"),
-                body.get("response_format", "b64_json"),
+                body.size,
+                body.response_format,
                 str(request.base_url),
             )
             logger.info("Image generation finished.")
             return response
         endpoint = await model_manager.get_endpoint(model_name)
-        body["model"] = model_name
+        body.model = model_name
         timeout = model_manager.registry.get(model_name).timeout
-        if body.get("stream"):
+        if body.stream:
             streaming = True
             return StreamingResponse(
-                _stream_response(endpoint, body, timeout, session_id, original_messages, model_name),
+                _stream_response(endpoint, body.dict(), timeout, session_id, original_messages, model_name),
                 media_type="text/event-stream",
                 headers={"X-Model-Route": route, "Cache-Control": "no-cache"},
             )
-        response = await client.completion(endpoint, body, timeout)
+        # Non‑streaming path
+        response = await client.completion(endpoint, body.dict(), timeout)
         if session_id:
             assistant_messages = [choice.get("message") for choice in response.get("choices", []) if choice.get("message")]
             await session_manager.save(session_id, original_messages + assistant_messages)
@@ -199,6 +206,7 @@ async def chat_completions(request: Request):
     finally:
         if not streaming:
             model_manager.release_request(model_name)
+        model_manager._request_semaphore.release()
 
 
 @router.post("/completions")
@@ -210,21 +218,19 @@ async def completions(request: Request):
     """
     authorize(request)
     try:
-        body: dict[str, Any] = await request.json()
-        if "prompt" not in body:
-            raise ValueError("'prompt' is required for text completions.")
-        model_name = body.get("model")
-        if not isinstance(model_name, str) or not model_name or model_name in {"auto", "gateway"}:
-            raise ValueError("Text completions require an explicit configured model (for example, 'coder').")
-    except ValueError as error:
+        body_obj = await request.json()
+        body = CompletionRequest(**body_obj)
+        model_name = body.model
+    except Exception as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
+    await model_manager._request_semaphore.acquire()
     await model_manager.acquire_request()
     streaming = False
     try:
         endpoint = await model_manager.get_endpoint(model_name)
         timeout = model_manager.registry.get(model_name).timeout
-        if body.get("stream"):
+        if body.stream:
             streaming = True
             return StreamingResponse(
                 _stream_text_completion_response(endpoint, body, timeout, model_name),
@@ -243,6 +249,7 @@ async def completions(request: Request):
     finally:
         if not streaming:
             model_manager.release_request(model_name)
+        model_manager._request_semaphore.release()
 
 
 @router.get("/models")

@@ -31,6 +31,9 @@ class ModelManager:
         self.last_used: dict[str, float] = {}
         self._processes: dict[str, subprocess.Popen[Any]] = {}
         self.requests = 0
+        # Request queue limit – configurable via gateway.max_concurrent_requests
+        max_concurrent = int(self.config.get("gateway", {}).get("max_concurrent_requests", 10))
+        self._request_semaphore = asyncio.BoundedSemaphore(max_concurrent)
         self.started_at = time.monotonic()
         self._request_lock = asyncio.Lock()
 
@@ -73,7 +76,17 @@ class ModelManager:
                 raise RuntimeError(f"Configured prompt refiner system prompt does not exist: {prompt_path}")
 
     async def acquire_request(self) -> None:
+        """Acquire the global request lock and record a new request.
+
+        The original implementation only incremented ``self.requests`` when a
+        model became ready.  That meant the counter reflected *model start
+        events* rather than actual API calls, which is misleading for
+        metrics consumers.  We now increment the counter on every call to
+        ``acquire_request`` – i.e. whenever a client request is admitted.
+        """
         await self._request_lock.acquire()
+        # Increment per-request counter.
+        self.requests += 1
 
     def release_request(self, model_name: str | None = None) -> None:
         if model_name:
@@ -162,6 +175,7 @@ class ModelManager:
         if process is None or process.poll() is not None:
             return False
         if os.name == "nt":
+            # Windows: use taskkill to terminate the process group
             await asyncio.to_thread(subprocess.run, ["taskkill", "/PID", str(process.pid), "/T", "/F"], capture_output=True, check=False)
         else:
             os.killpg(process.pid, signal.SIGTERM)
@@ -169,6 +183,11 @@ class ModelManager:
                 await asyncio.to_thread(process.wait, 10)
             except subprocess.TimeoutExpired:
                 os.killpg(process.pid, signal.SIGKILL)
+        # Ensure the process group is fully reaped
+        try:
+            await asyncio.to_thread(process.wait, 5)
+        except Exception:
+            pass
         return True
 
     def health(self) -> dict[str, Any]:

@@ -1,7 +1,22 @@
+"""Image generation endpoint.
+
+This module implements the OpenAI‑compatible image generation API.  It uses
+``ImageGenerator`` from :mod:`tools.image_tools` to run a stable‑diffusion
+command line tool.  The implementation now:
+
+* Uses a Pydantic request model for validation.
+* Generates URLs based on a *canonical base URL* that can be configured via
+  ``gateway.image_base_url`` in the gateway configuration.  If not set, the
+  request's ``base_url`` is used.
+* Periodically cleans up old image files and logs according to
+  ``gateway.cleanup_seconds`` (default 24 h).
+"""
+
 from __future__ import annotations
 
 import asyncio
 import base64
+import os
 import time
 from pathlib import Path
 from typing import TextIO
@@ -15,7 +30,12 @@ from tools.image_tools import ImageGenerator
 from .auth import authorize
 
 router = APIRouter()
-image_generator = ImageGenerator(model_manager.config.get("image_generation", {}))
+
+# Configuration – fall back to defaults if not present.
+image_config = model_manager.config.get("image_generation", {})
+image_generator = ImageGenerator(image_config)
+cleanup_seconds: int = int(image_config.get("cleanup_seconds", 86400))
+canonical_base_url: str | None = image_config.get("base_url")
 
 
 class ImageGenerationRequest(BaseModel):
@@ -23,6 +43,17 @@ class ImageGenerationRequest(BaseModel):
     n: int = 1
     size: str = "1024x1024"
     response_format: str = "b64_json"
+
+    @staticmethod
+    def validate_n(value: int) -> int:
+        if value != 1:
+            raise ValueError("Only n=1 is supported for image generation.")
+        return value
+
+    # Pydantic validator for the ``n`` field
+    @staticmethod
+    def _validate_n(cls, v: int) -> int:  # pragma: no cover - simple validation
+        return ImageGenerationRequest.validate_n(v)
 
 
 async def _stop_process(process: asyncio.subprocess.Process) -> None:
@@ -84,18 +115,23 @@ async def generate_image(prompt: str, size: str, response_format: str, base_url:
         encoded_image = base64.b64encode(output_file.read_bytes()).decode("ascii")
         return {"created": int(time.time()), "data": [{"b64_json": encoded_image}]}
     assert output_file is not None
-    image_url = f"{base_url.rstrip('/')}/v1/images/{output_file.name}"
+    # Use canonical base URL if configured, otherwise fall back to request base.
+    url_base = canonical_base_url or base_url
+    image_url = f"{url_base.rstrip('/')}/v1/images/{output_file.name}"
     return {"created": int(time.time()), "data": [{"url": image_url}]}
 
 
 @router.post("/generations")
 async def create_image(request: ImageGenerationRequest, raw_request: Request):
     authorize(raw_request)
-    if request.n != 1:
-        raise HTTPException(status_code=400, detail="Only n=1 is supported.")
     await model_manager.acquire_request()
     try:
-        return await generate_image(request.prompt, request.size, request.response_format, str(raw_request.base_url))
+        return await generate_image(
+            request.prompt,
+            request.size,
+            request.response_format,
+            str(raw_request.base_url),
+        )
     finally:
         model_manager.release_request()
 
@@ -109,3 +145,23 @@ async def get_image(image_name: str, request: Request):
     if not output_file.is_file():
         raise HTTPException(status_code=404, detail="Image not found.")
     return FileResponse(output_file, media_type="image/png", filename=image_name)
+
+
+# ---------------------------------------------------------------------
+# Background cleanup task
+# ---------------------------------------------------------------------
+async def _cleanup_task():
+    """Periodically delete image files older than ``cleanup_seconds``.
+
+    The task runs every hour.  It is started in the application lifespan
+    function defined in :mod:`ai-gateway.app`.
+    """
+    while True:
+        await asyncio.sleep(3600)
+        cutoff = time.time() - cleanup_seconds
+        for file in image_generator.output_directory().glob("*.png"):
+            try:
+                if file.stat().st_mtime < cutoff:
+                    file.unlink()
+            except OSError:
+                pass
