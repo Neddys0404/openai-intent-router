@@ -24,30 +24,30 @@ models:
       -m "/mnt/storage120/models/router/qwen2.5-3b-instruct-q4_k_m.gguf"
       --host 127.0.0.1
       --port 9000
-      -c 2048
+      -c 1024
       -ngl 0
 
-  chat:
+  gemma-4-26B_q4_0-it:
     endpoint: "http://localhost:8001/v1"
     timeout: 600
     health_path: "/models"
     start_command: >-
       ~/llama.cpp/build/bin/llama-server
-      -m "/mnt/storage120/models/gemma-4-26B_q4_0-it.gguf"
-      --mmproj "/mnt/storage120/models/mmproj/gemma-4-26B-it-mmproj.gguf"
+      -m "/mnt/storage120/models/general/gemma-4-26B_q4_0-it.gguf"
+      --mmproj "/mnt/storage120/models/general/gemma-4-26B-it-mmproj.gguf"
       --host 127.0.0.1
       --port 8001
-      -c 16384
+      -c 32768
       --temp 0.6
       --top-p 0.95
-      --top-k 20
-      --repeat-penalty 1.05
+      --top-k 12
+      --repeat-penalty 1.15
       --batch-size 2048
       --ubatch-size 512
       --cache-type-k q8_0
       --cache-type-v q8_0
 
-  coder:
+  qwen3.5-4B-super-coder:
     endpoint: "http://localhost:8002/v1"
     timeout: 600
     health_path: "/models"
@@ -67,45 +67,43 @@ models:
       --cache-type-k q8_0
       --cache-type-v q8_0
 
-routes:
-  coding:
-    model: coder
-    keywords: ["code", "program", "bug", "python", "javascript", "typescript", "docker", "git", "api", "cpp", "c++", "cmake", "esp-idf", "esp32", "bash", "shell", "systemd"]
-  chat:
-    model: chat
-    keywords: []
-
 # OpenAI-compatible POST /v1/images/generations.  This runs sd-cli directly
 # (without a shell or tmux), logs each job under output_directory/logs, and
 # serializes access with the managed GPU models.
 image_generation:
-  enabled: true
-  # Advertised through /v1/models for clients such as Odysseus. This ID is for
-  # the Images API only; do not select it for chat completions.
-  model: qwen-image-2512
-  # Compatibility ID for clients that only auto-detect OpenAI image-model names.
-  aliases: ["gpt-image-1"]
-  sd_cli: "/home/ned/stable-diffusion.cpp/build/bin/sd-cli"
-  diffusion_model: "/mnt/storage120/models/qwen-image-2512/qwen-image-2512-Q4_K_M.gguf"
-  vae: "/mnt/storage120/models/qwen-image-2512/vae/qwen_image_vae.safetensors"
-  llm: "/mnt/storage120/models/qwen-image-2512/vl/Qwen2.5-VL-7B-Instruct-UD-Q4_K_XL.gguf"
-  output_directory: "/home/ned/QwenGen"
-  # The Qwen Image stack needs about 19 GB VRAM and will not fit on the 4 GB
-  # GTX 1650 Ti. This CPU profile avoids CUDA allocations; expect it to be
-  # substantially slower. Set cpu_only: false and tune the offload options if
-  # you later move image generation to a GPU with enough VRAM.
-  cpu_only: true
-  offload_to_cpu: true
-  clip_on_cpu: true
-  vae_on_cpu: true
-  # threads: 8  # Optional: cap CPU threads; omitted uses all physical cores.
-  timeout_seconds: 900
-  max_prompt_characters: 8000
-  allowed_sizes: ["1024x1024"]
-  cfg_scale: 2.5
-  sampling_method: euler
-  steps: 40
-  flow_shift: 3
+    enabled: true
+    # Advertised through /v1/models for clients such as Odysseus. This ID is for
+    # the Images API only; do not select it for chat completions.
+    model: qwen-image-2512
+    # Compatibility ID for clients that only auto-detect OpenAI image-model names.
+    aliases: ["gpt-image-1"]
+    sd_cli: "/home/ned/stable-diffusion.cpp/build/bin/sd-cli"
+    diffusion_model: "/mnt/storage120/models/qwen-image-2512/qwen-image-2512-Q4_K_M.gguf"
+    vae: "/mnt/storage120/models/qwen-image-2512/vae/qwen_image_vae.safetensors"
+    llm: "/mnt/storage120/models/qwen-image-2512/vl/Qwen2.5-VL-7B-Instruct-UD-Q4_K_XL.gguf"
+    output_directory: "/mnt/data/media/JunRen/FluxGen"
+    # Uses the first CUDA GPU. Change this for a different GPU, or remove it to
+    # inherit CUDA_VISIBLE_DEVICES from the service environment.
+    # cuda_visible_devices: "0"
+    cpu_only: true
+    offload_to_cpu: true
+    clip_on_cpu: true
+    vae_on_cpu: true
+    timeout_seconds: 900
+    max_prompt_characters: 8000
+    allowed_sizes: ["1024x1024"]
+    cfg_scale: 1.0
+    sampling_method: euler
+    steps: 4
+    flow_shift: 3
+
+routes:
+  coding:
+    model: qwen3.5-4B-super-coder
+    keywords: ["code", "program", "bug", "python", "javascript", "typescript", "docker", "git", "api", "cpp", "c++", "cmake", "esp-idf", "esp32", "bash", "shell", "systemd"]
+  chat:
+    model: gemma-4-26B_q4_0-it
+    keywords: []
 
 tools:
   enabled: false
